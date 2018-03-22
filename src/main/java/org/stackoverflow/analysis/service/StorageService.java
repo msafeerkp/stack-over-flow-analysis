@@ -18,9 +18,17 @@ import org.apache.spark.streaming.kafka010.LocationStrategies;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.stackoverflow.analysis.dao.AnswerDao;
+import org.stackoverflow.analysis.dao.CommentDao;
+import org.stackoverflow.analysis.dao.QuestionDao;
+import org.stackoverflow.analysis.dao.TagDao;
+import org.stackoverflow.analysis.dao.UserDao;
 import org.stackoverflow.analysis.datasource.CassandraDataSource;
 import org.stackoverflow.analysis.model.PostModel;
+import org.stackoverflow.analysis.model.QuestionModel;
+import org.stackoverflow.analysis.model.TagModel;
+import org.stackoverflow.analysis.model.UserModel;
 import org.stackoverflow.analysis.model.AnswerModel;
+import org.stackoverflow.analysis.model.CommentModel;
 import org.stackoverflow.analysis.model.Message;
 import org.stackoverflow.analysis.utils.AnalyticsConfigUtil;
 import org.stackoverflow.analysis.utils.KafkaConfigUtil;
@@ -78,14 +86,45 @@ public class StorageService implements Serializable{
 		try {
 			
 			JavaDStream<Message> postStream = stream.map( record -> {
-				String value = record.value();
-				ObjectMapper mapper = new ObjectMapper();
-				Message message = mapper.readValue(value, Message.class);
-				Object items = message.getItems();
-				if(message.getMetaType().equals("ANSWER")) {
-					List<AnswerModel> answerModels = mapper.convertValue(items, new TypeReference<List<AnswerModel>>() {});
-					message.setItems(answerModels);
+				Logger log = LoggerFactory.getLogger(this.getClass());
+				log.info("=============== Executor Map operation log starts from here =================");
+				Message message = null;
+				try {
+					String value = record.value();
+					ObjectMapper mapper = new ObjectMapper();
+					message = mapper.readValue(value, Message.class);
+					Object items = message.getItems();
+					if(message.getMetaType().equals("ANSWER")) {
+						log.info("since message is of type 'ANSWER' converting the message to answer model");
+						List<AnswerModel> answerModels = mapper.convertValue(items, new TypeReference<List<AnswerModel>>() {});
+						message.setItems(answerModels);
+					}
+					else if(message.getMetaType().equals("QUESTION")) {
+						log.info("since message is of type 'QUESTION' converting the message to answer model");
+						List<QuestionModel> questions = mapper.convertValue(items, new TypeReference<List<QuestionModel>>() {});
+						message.setItems(questions);
+					}
+					else if(message.getMetaType().equals("COMMENT")) {
+						log.info("since message is of type 'COMMENT' converting the message to answer model");
+						List<CommentModel> comments = mapper.convertValue(items, new TypeReference<List<CommentModel>>() {});
+						message.setItems(comments);
+					}
+					else if(message.getMetaType().equals("TAG")) {
+						log.info("since message is of type 'TAG' converting the message to answer model");
+						List<TagModel> tags = mapper.convertValue(items, new TypeReference<List<TagModel>>() {});
+						message.setItems(tags);
+					}
+					else if(message.getMetaType().equals("USER")) {
+						log.info("since message is of type 'USER' converting the message to answer model");
+						List<UserModel> users = mapper.convertValue(items, new TypeReference<List<UserModel>>() {});
+						message.setItems(users);
+					}
 				}
+				catch (Exception e) {
+					log.error("Exception occured while performing the map operation.",e);
+				}
+				
+				log.info("=============== Executor Map operation log starts from here =================");
 				
 				return message;
 			});
@@ -93,18 +132,44 @@ public class StorageService implements Serializable{
 				
 				postRDD.foreachPartition(wrapperModels -> {
 					Logger log = LoggerFactory.getLogger(this.getClass());
-					log.info("=============== Executor log starts from here =================");
-					Session session = null;
+					log.info("=============== Executor for each partition job log starts from here =================");
 					try  {
 						
 						while(wrapperModels.hasNext()) {
 							Message wrapperModel = wrapperModels.next();
 							if(wrapperModel.getMetaType().equals("ANSWER")) {
-								
+								log.info("Model is of type 'Answer'. preparing to insert the model.");
 								@SuppressWarnings("unchecked")
 								List<AnswerModel> answerModels = (List<AnswerModel>) wrapperModel.getItems();
 								AnswerDao.getInstance().add(answerModels);
-								
+								log.info("answer model insertion completed.");
+							}
+							else if(wrapperModel.getMetaType().equals("QUESTION")) {
+								log.info("Model is of type 'Answer'. preparing to insert the model.");
+								@SuppressWarnings("unchecked")
+								List<QuestionModel> questions = (List<QuestionModel>) wrapperModel.getItems();
+								QuestionDao.getInstance().add(questions);
+								log.info("answer model insertion completed.");
+							}
+							else if(wrapperModel.getMetaType().equals("COMMENT")) {
+								log.info("Model is of type 'Answer'. preparing to insert the model.");
+								List<CommentModel> comments = (List<CommentModel>) wrapperModel.getItems();
+								CommentDao.getInstance().add(comments);
+								log.info("answer model insertion completed.");
+							}
+							else if(wrapperModel.getMetaType().equals("TAG")) {
+								log.info("Model is of type 'Answer'. preparing to insert the model.");
+								@SuppressWarnings("unchecked")
+								List<TagModel> tags = (List<TagModel>) wrapperModel.getItems();
+								TagDao.getInstance().add(tags);
+								log.info("answer model insertion completed.");
+							}
+							else if(wrapperModel.getMetaType().equals("USER")) {
+								log.info("Model is of type 'Answer'. preparing to insert the model.");
+								@SuppressWarnings("unchecked")
+								List<UserModel> users = (List<UserModel>) wrapperModel.getItems();
+								UserDao.getInstance().add(users);
+								log.info("answer model insertion completed.");
 							}
 							
 							
@@ -112,17 +177,10 @@ public class StorageService implements Serializable{
 						}
 					}
 					catch (Exception e) {
-						log.error("Exception occured while inserting post and meta.",e);
-					}
-					finally {
-						if(session != null) {
-							log.error("Closing cassandra session.");
-							session.close();
-						}
-						
+						log.error("Exception occured while perfroming for each partition job [inserting data to cassandra]",e);
 					}
 					
-					log.info("=============== Executor log ends from here =================");
+					log.info("=============== Executor for each partition job log ends here =================");
 					
 				});
 				
