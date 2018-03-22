@@ -3,21 +3,22 @@ package org.stackoverflow.analysis.model;
 import java.io.Serializable;
 import java.util.List;
 
-public class PostWrapperModel implements Serializable{
+public class Message implements Serializable{
 	
 	/**
 	 * 
 	 */
 	private static final long serialVersionUID = -4453924962610681264L;
 	
-	private List<PostModel> items;
+	private Object items;
 	private long page;
 	private long time;
+	private String metaType;
 	
-	public List<PostModel> getItems() {
+	public Object getItems() {
 		return items;
 	}
-	public void setItems(List<PostModel> items) {
+	public void setItems(Object items) {
 		this.items = items;
 	}
 	public long getPage() {
@@ -32,10 +33,14 @@ public class PostWrapperModel implements Serializable{
 	public void setTime(long time) {
 		this.time = time;
 	}
-	@Override
-	public String toString() {
-		return "PostWrapperModel [items=" + items + ", page=" + page + ", time=" + time + "]";
-	}	
+	public String getMetaType() {
+		return metaType;
+	}
+	public void setMetaType(String metaType) {
+		this.metaType = metaType;
+	}
+	
+	
 	
 	
 

@@ -17,9 +17,11 @@ import org.apache.spark.streaming.kafka010.KafkaUtils;
 import org.apache.spark.streaming.kafka010.LocationStrategies;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.stackoverflow.analysis.dao.AnswerDao;
 import org.stackoverflow.analysis.datasource.CassandraDataSource;
 import org.stackoverflow.analysis.model.PostModel;
-import org.stackoverflow.analysis.model.PostWrapperModel;
+import org.stackoverflow.analysis.model.AnswerModel;
+import org.stackoverflow.analysis.model.Message;
 import org.stackoverflow.analysis.utils.AnalyticsConfigUtil;
 import org.stackoverflow.analysis.utils.KafkaConfigUtil;
 import org.stackoverflow.analysis.utils.SparkUtil;
@@ -30,6 +32,7 @@ import com.datastax.driver.core.PreparedStatement;
 import com.datastax.driver.core.RegularStatement;
 import com.datastax.driver.core.Session;
 import com.datastax.spark.connector.japi.CassandraJavaUtil;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import scala.Tuple4;
@@ -74,11 +77,17 @@ public class StorageService implements Serializable{
 		
 		try {
 			
-			JavaDStream<PostWrapperModel> postStream = stream.map( record -> {
+			JavaDStream<Message> postStream = stream.map( record -> {
 				String value = record.value();
 				ObjectMapper mapper = new ObjectMapper();
-				PostWrapperModel postWrapperModel = mapper.readValue(value, PostWrapperModel.class);
-				return postWrapperModel;
+				Message message = mapper.readValue(value, Message.class);
+				Object items = message.getItems();
+				if(message.getMetaType().equals("ANSWER")) {
+					List<AnswerModel> answerModels = mapper.convertValue(items, new TypeReference<List<AnswerModel>>() {});
+					message.setItems(answerModels);
+				}
+				
+				return message;
 			});
 			postStream.foreachRDD( postRDD -> {
 				
@@ -87,34 +96,19 @@ public class StorageService implements Serializable{
 					log.info("=============== Executor log starts from here =================");
 					Session session = null;
 					try  {
-						session = CassandraDataSource.getConnection();
-						log.info("Cassandra cluster info :: {}",session.getCluster().toString());
-						log.info("Obtained a session object. details :: {}", session.toString());
-						PreparedStatement psForMeta = session.prepare("insert into sof_meta (meta_type, time, batch_size, page_number) values (?,?,?,?)");
-						log.info("insert statement is prepared for Post Meta. statement :: {}",psForMeta.getQueryString());
-						PreparedStatement psForPost = session.prepare(""
-								+ "insert into post "
-									+ "(post_type, post_id, last_activity_date, creation_date, last_edit_date, link, owner, score) "
-									+ "values (?,?,?,?,?,?,?,?)"
-									);
-						log.info("insert statement is prepared for Post. statement :: {}",psForPost.getQueryString());
+						
 						while(wrapperModels.hasNext()) {
-							PostWrapperModel wrapperModel = wrapperModels.next();
-							List<PostModel> postModels = wrapperModel.getItems();
-							
-							for(PostModel postModel : postModels) {
-								log.info("inserting the post with post id :: {}",postModel.getPost_id());
-								session.execute( 
-										psForPost.bind(postModel.getPost_type(), postModel.getPost_id(), 
-										new Date((postModel.getLast_activity_date() * 1000)), new Date((postModel.getCreation_date()* 1000)), 
-										new Date((postModel.getLast_edit_date()* 1000)), postModel.getLink(), postModel.getOwner(), postModel.getScore())
-										);
+							Message wrapperModel = wrapperModels.next();
+							if(wrapperModel.getMetaType().equals("ANSWER")) {
+								
+								@SuppressWarnings("unchecked")
+								List<AnswerModel> answerModels = (List<AnswerModel>) wrapperModel.getItems();
+								AnswerDao.getInstance().add(answerModels);
 								
 							}
 							
-							BoundStatement boundStatement = psForMeta.bind("POST",new Date(wrapperModel.getTime()), (short) wrapperModel.getItems().size(), (short) wrapperModel.getPage());
-							session.execute(boundStatement);
-							log.info("inserted meta with details as follows :-  page number  :: {} ",wrapperModel.getPage());
+							
+							
 						}
 					}
 					catch (Exception e) {

@@ -18,9 +18,9 @@ public class SparkUtil {
 		Properties properties = AnalyticsConfigUtil.getProperties();
 		SparkConf sparkConf = new SparkConf()
 				.setMaster(properties.getProperty("analytics.spark.master.url"))
-				.set("spark.executor.uri",properties.getProperty("analytics.spark.executor.uri"))
-				.set("spark.executor.extraClassPath", properties.getProperty("analytics.spark.executor.extraClassPath"))
-				.setJars(new String[]{"/home/administrator/Installed/spark/lib/analysis-0.0.1-SNAPSHOT-jar-with-dependencies.jar"})
+				//.set("spark.executor.uri",properties.getProperty("analytics.spark.executor.uri"))
+				//.set("spark.executor.extraClassPath", properties.getProperty("analytics.spark.executor.extraClassPath"))
+				//.setJars(new String[]{"/home/administrator/Installed/spark/lib/analysis-0.0.1-SNAPSHOT-jar-with-dependencies.jar"})
 				.setAppName( properties.getProperty("analytics.spark.app.name"));
 		log.info("Spark common config constructed.");
 		return sparkConf;
